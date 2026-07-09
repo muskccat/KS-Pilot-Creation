@@ -1,0 +1,22 @@
+# Python cache and test artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Local environments
+.venv/
+venv/
+env/
+
+# Generated pipeline outputs
+outputs/
+outputs_smoke/
+
+# Local/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
