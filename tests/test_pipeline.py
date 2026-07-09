@@ -79,6 +79,8 @@ class PipelineTests(unittest.TestCase):
             llm_provider="mock",
             ollama_url="http://localhost:11434",
             model="llama3.1",
+            ollama_timeout=300,
+            ollama_keep_alive=0,
         )
 
         request = json.loads(
@@ -87,6 +89,8 @@ class PipelineTests(unittest.TestCase):
         self.assertEqual(request["llm_provider"], "mock")
         self.assertEqual(request["ollama_url"], "http://localhost:11434")
         self.assertEqual(request["model"], "llama3.1")
+        self.assertEqual(request["ollama_timeout"], 300)
+        self.assertEqual(request["ollama_keep_alive"], 0)
 
     def test_cli_accepts_ollama_options_for_create(self):
         from pilot import main
@@ -105,6 +109,10 @@ class PipelineTests(unittest.TestCase):
                     "http://localhost:11434",
                     "--model",
                     "llama3.1",
+                    "--ollama-timeout",
+                    "300",
+                    "--ollama-keep-alive",
+                    "0",
                 ]
             )
 
@@ -122,6 +130,96 @@ class PipelineTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 1)
         self.assertEqual(error_output.getvalue(), "Error: Start Ollama and try again.\n")
+
+    def test_cli_passes_ollama_timeout_to_create(self):
+        from pilot import main
+
+        output = StringIO()
+        with patch("pilot.create_project", return_value=self.temp_dir / "project") as create:
+            with redirect_stdout(output):
+                exit_code = main(
+                    [
+                        "create",
+                        "Topic",
+                        "--outputs",
+                        str(self.temp_dir),
+                        "--llm",
+                        "ollama",
+                        "--model",
+                        "qwen3.5:27b",
+                        "--ollama-timeout",
+                        "600",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(create.call_args.kwargs["ollama_timeout"], 600)
+
+    def test_cli_passes_ollama_keep_alive_to_create(self):
+        from pilot import main
+
+        output = StringIO()
+        with patch("pilot.create_project", return_value=self.temp_dir / "project") as create:
+            with redirect_stdout(output):
+                exit_code = main(
+                    [
+                        "create",
+                        "Topic",
+                        "--outputs",
+                        str(self.temp_dir),
+                        "--llm",
+                        "ollama",
+                        "--model",
+                        "qwen3.5:27b",
+                        "--ollama-keep-alive",
+                        "30s",
+                    ]
+                )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(create.call_args.kwargs["ollama_keep_alive"], "30s")
+
+    def test_cli_check_ollama_reports_model_available(self):
+        from pilot import main
+
+        output = StringIO()
+        with patch(
+            "pilot.OllamaClient.check_model",
+            return_value={
+                "server_available": True,
+                "model_available": True,
+                "model": "qwen3.5:27b",
+                "base_url": "http://localhost:11434",
+                "available_models": ["llama3.1:latest", "qwen3.5:27b"],
+            },
+        ):
+            with redirect_stdout(output):
+                exit_code = main(["check-ollama", "--model", "qwen3.5:27b"])
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("Ollama server: OK", output.getvalue())
+        self.assertIn("Model qwen3.5:27b: OK", output.getvalue())
+
+    def test_cli_check_ollama_returns_error_for_missing_model(self):
+        from pilot import main
+
+        output = StringIO()
+        with patch(
+            "pilot.OllamaClient.check_model",
+            return_value={
+                "server_available": True,
+                "model_available": False,
+                "model": "qwen3.5:27b",
+                "base_url": "http://localhost:11434",
+                "available_models": ["llama3.1:latest"],
+            },
+        ):
+            with redirect_stdout(output):
+                exit_code = main(["check-ollama", "--model", "qwen3.5:27b"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertIn("Model qwen3.5:27b: MISSING", output.getvalue())
+        self.assertIn("ollama pull qwen3.5:27b", output.getvalue())
 
 
 if __name__ == "__main__":

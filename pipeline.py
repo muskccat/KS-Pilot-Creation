@@ -15,9 +15,11 @@ def create_project(
     llm_provider="mock",
     ollama_url="http://localhost:11434",
     model="llama3.1",
+    ollama_timeout=300,
+    ollama_keep_alive=0,
 ):
     store = ProjectStore(outputs_dir)
-    client = _build_llm_client(llm_provider, ollama_url, model)
+    client = _build_llm_client(llm_provider, ollama_url, model, ollama_timeout, ollama_keep_alive)
     plan = client.create_plan(topic)
     project_dir, _project = store.create_project(topic, plan)
     project = store.read_project(project_dir)
@@ -25,14 +27,28 @@ def create_project(
         "provider": llm_provider,
         "ollama_url": ollama_url,
         "model": model,
+        "timeout": ollama_timeout,
+        "keep_alive": ollama_keep_alive,
     }
     store.write_project(project_dir, project)
     run_dir = project_dir / "runs" / "run_001"
-    _write_run_artifacts(run_dir, _llm_request("create", topic, llm_provider, ollama_url, model), plan)
+    _write_run_artifacts(
+        run_dir,
+        _llm_request("create", topic, llm_provider, ollama_url, model, ollama_timeout, ollama_keep_alive),
+        plan,
+    )
     return project_dir
 
 
-def iterate_project(project_dir, feedback, llm_provider=None, ollama_url=None, model=None):
+def iterate_project(
+    project_dir,
+    feedback,
+    llm_provider=None,
+    ollama_url=None,
+    model=None,
+    ollama_timeout=None,
+    ollama_keep_alive=None,
+):
     project_dir = Path(project_dir)
     store = ProjectStore(project_dir.parent)
     project = store.read_project(project_dir)
@@ -40,16 +56,32 @@ def iterate_project(project_dir, feedback, llm_provider=None, ollama_url=None, m
     selected_provider = llm_provider or llm_config.get("provider", "mock")
     selected_url = ollama_url or llm_config.get("ollama_url", "http://localhost:11434")
     selected_model = model or llm_config.get("model", "llama3.1")
+    selected_timeout = ollama_timeout or llm_config.get("timeout", 300)
+    selected_keep_alive = ollama_keep_alive if ollama_keep_alive is not None else llm_config.get("keep_alive", 0)
 
     previous_run = project_dir / "runs" / project["current_run"]
     previous_plan = ProductionPlan.from_dict(
         json.loads((previous_run / "llm_response.json").read_text(encoding="utf-8"))
     )
 
-    client = _build_llm_client(selected_provider, selected_url, selected_model)
+    client = _build_llm_client(
+        selected_provider,
+        selected_url,
+        selected_model,
+        selected_timeout,
+        selected_keep_alive,
+    )
     plan = client.revise_plan(project["topic"], feedback, previous_plan)
     run_dir = store.create_run(project_dir, feedback)
-    request = _llm_request("iterate", project["topic"], selected_provider, selected_url, selected_model)
+    request = _llm_request(
+        "iterate",
+        project["topic"],
+        selected_provider,
+        selected_url,
+        selected_model,
+        selected_timeout,
+        selected_keep_alive,
+    )
     request["feedback"] = feedback
     _write_run_artifacts(run_dir, request, plan)
 
@@ -59,6 +91,8 @@ def iterate_project(project_dir, feedback, llm_provider=None, ollama_url=None, m
         "provider": selected_provider,
         "ollama_url": selected_url,
         "model": selected_model,
+        "timeout": selected_timeout,
+        "keep_alive": selected_keep_alive,
     }
     store.write_project(project_dir, project)
     return run_dir
@@ -101,19 +135,26 @@ def _write_run_artifacts(run_dir, request, plan):
     build_pdf(plan, poster_image, run_dir)
 
 
-def _build_llm_client(provider, ollama_url, model):
+def _build_llm_client(provider, ollama_url, model, ollama_timeout, ollama_keep_alive):
     if provider == "mock":
         return MockOllamaClient()
     if provider == "ollama":
-        return OllamaClient(base_url=ollama_url, model=model)
+        return OllamaClient(
+            base_url=ollama_url,
+            model=model,
+            timeout=ollama_timeout,
+            keep_alive=ollama_keep_alive,
+        )
     raise ValueError(f"Unsupported LLM provider: {provider}")
 
 
-def _llm_request(mode, topic, llm_provider, ollama_url, model):
+def _llm_request(mode, topic, llm_provider, ollama_url, model, ollama_timeout, ollama_keep_alive):
     return {
         "topic": topic,
         "mode": mode,
         "llm_provider": llm_provider,
         "ollama_url": ollama_url,
         "model": model,
+        "ollama_timeout": ollama_timeout,
+        "ollama_keep_alive": ollama_keep_alive,
     }

@@ -31,6 +31,52 @@ class FakeOpener:
 
 
 class OllamaClientTests(unittest.TestCase):
+    def test_check_model_reports_available_model_from_tags(self):
+        from llm.ollama_client import OllamaClient
+
+        opener = FakeOpener(
+            {
+                "models": [
+                    {"name": "llama3.1:latest"},
+                    {"name": "qwen3.5:27b"},
+                ]
+            }
+        )
+        client = OllamaClient(base_url="http://localhost:11434", model="qwen3.5:27b", opener=opener)
+
+        result = client.check_model()
+
+        self.assertTrue(result["server_available"])
+        self.assertTrue(result["model_available"])
+        self.assertEqual(result["model"], "qwen3.5:27b")
+        self.assertEqual(result["available_models"], ["llama3.1:latest", "qwen3.5:27b"])
+        request, timeout = opener.requests[0]
+        self.assertEqual(request.full_url, "http://localhost:11434/api/tags")
+        self.assertEqual(request.get_method(), "GET")
+        self.assertEqual(timeout, 60)
+
+    def test_check_model_matches_latest_suffix(self):
+        from llm.ollama_client import OllamaClient
+
+        opener = FakeOpener({"models": [{"name": "llama3.1:latest"}]})
+        client = OllamaClient(base_url="http://localhost:11434", model="llama3.1", opener=opener)
+
+        result = client.check_model()
+
+        self.assertTrue(result["model_available"])
+
+    def test_check_model_reports_missing_model(self):
+        from llm.ollama_client import OllamaClient
+
+        opener = FakeOpener({"models": [{"name": "llama3.1:latest"}]})
+        client = OllamaClient(base_url="http://localhost:11434", model="qwen3.5:27b", opener=opener)
+
+        result = client.check_model()
+
+        self.assertTrue(result["server_available"])
+        self.assertFalse(result["model_available"])
+        self.assertEqual(result["available_models"], ["llama3.1:latest"])
+
     def test_create_plan_posts_generate_request_and_validates_response(self):
         from llm.ollama_client import OllamaClient
 
@@ -63,7 +109,40 @@ class OllamaClientTests(unittest.TestCase):
         body = json.loads(request.data.decode("utf-8"))
         self.assertEqual(body["model"], "llama3.1")
         self.assertFalse(body["stream"])
+        self.assertEqual(body["keep_alive"], 0)
         self.assertIn("A lonely gardener on the moon", body["prompt"])
+
+    def test_create_plan_accepts_custom_keep_alive(self):
+        from llm.ollama_client import OllamaClient
+
+        llm_payload = {
+            "project_title": "Moon Garden",
+            "concept": "A quiet lunar gardening poster.",
+            "image_prompt": "A gardener tending glowing plants on the moon",
+            "negative_prompt": "blurry, low quality",
+            "poster_copy": {
+                "headline": "Moon Garden",
+                "subtitle": "A quiet story under the stars",
+            },
+            "pdf_outline": [
+                {
+                    "title": "Concept",
+                    "body": "A concise direction for the poster.",
+                }
+            ],
+        }
+        opener = FakeOpener({"response": json.dumps(llm_payload)})
+        client = OllamaClient(
+            base_url="http://localhost:11434",
+            model="llama3.1",
+            keep_alive="30s",
+            opener=opener,
+        )
+
+        client.create_plan("A lonely gardener on the moon")
+
+        body = json.loads(opener.requests[0][0].data.decode("utf-8"))
+        self.assertEqual(body["keep_alive"], "30s")
 
     def test_create_plan_retries_once_with_repair_prompt_for_invalid_json(self):
         from llm.ollama_client import OllamaClient
@@ -110,6 +189,21 @@ class OllamaClientTests(unittest.TestCase):
             client.create_plan("Topic")
 
         self.assertIn("Start Ollama", str(context.exception))
+
+    def test_timeout_error_mentions_timeout_and_configured_seconds(self):
+        from llm.ollama_client import OllamaClient, OllamaConnectionError
+
+        client = OllamaClient(
+            base_url="http://localhost:11434",
+            model="qwen3.5:27b",
+            timeout=300,
+            opener=FakeOpener(TimeoutError("timed out")),
+        )
+
+        with self.assertRaises(OllamaConnectionError) as context:
+            client.create_plan("Topic")
+
+        self.assertIn("timed out after 300 seconds", str(context.exception))
 
 
 if __name__ == "__main__":

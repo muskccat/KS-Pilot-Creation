@@ -84,6 +84,21 @@ Ollama mode calls the local Ollama API:
 .venv\Scripts\python.exe pilot.py create "A lonely gardener on the moon" --llm ollama --ollama-url http://localhost:11434 --model llama3.1
 ```
 
+Large models may need more time on the first request while Ollama loads them into GPU memory:
+
+```powershell
+.venv\Scripts\python.exe pilot.py create "A lonely gardener on the moon" --llm ollama --model qwen3.5:27b --ollama-timeout 600 --ollama-keep-alive 0
+```
+
+The default `--ollama-keep-alive 0` asks Ollama to unload the LLM after each generation. This is intentional for 24GB VRAM systems where the LLM stage and ComfyUI image stage must not keep large models loaded at the same time.
+
+Check whether Ollama is running and a model is installed:
+
+```powershell
+.venv\Scripts\python.exe pilot.py check-ollama --model llama3.1
+.venv\Scripts\python.exe pilot.py check-ollama --model qwen3.5:27b
+```
+
 If Ollama is not running, start Ollama first and retry the command.
 
 ## Planned Project Structure

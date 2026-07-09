@@ -23,10 +23,18 @@ class MockOllamaClient:
 
 
 class OllamaClient:
-    def __init__(self, base_url="http://localhost:11434", model="llama3.1", timeout=60, opener=None):
+    def __init__(
+        self,
+        base_url="http://localhost:11434",
+        model="llama3.1",
+        timeout=60,
+        keep_alive=0,
+        opener=None,
+    ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.timeout = timeout
+        self.keep_alive = keep_alive
         self.opener = opener or urlopen
 
     def create_plan(self, topic):
@@ -36,6 +44,31 @@ class OllamaClient:
     def revise_plan(self, topic, feedback, previous_plan):
         prompt = _revision_prompt(topic, feedback, previous_plan)
         return self._generate_plan(prompt)
+
+    def check_model(self):
+        request = Request(f"{self.base_url}/api/tags", method="GET")
+        try:
+            with self.opener(request, timeout=self.timeout) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except TimeoutError as exc:
+            raise OllamaConnectionError(
+                f"Ollama request to {self.base_url} timed out after {self.timeout} seconds. "
+                "The model may still be loading; retry or increase --ollama-timeout."
+            ) from exc
+        except URLError as exc:
+            raise OllamaConnectionError(
+                f"Could not connect to Ollama at {self.base_url}. Start Ollama and try again."
+            ) from exc
+
+        models = payload.get("models", [])
+        available = [model.get("name") for model in models if isinstance(model, dict) and model.get("name")]
+        return {
+            "server_available": True,
+            "model_available": _model_matches(self.model, available),
+            "model": self.model,
+            "base_url": self.base_url,
+            "available_models": available,
+        }
 
     def _generate_plan(self, prompt):
         raw_response = self._generate_text(prompt)
@@ -56,6 +89,7 @@ class OllamaClient:
                     "model": self.model,
                     "prompt": prompt,
                     "stream": False,
+                    "keep_alive": self.keep_alive,
                 },
                 ensure_ascii=False,
             ).encode("utf-8"),
@@ -65,6 +99,11 @@ class OllamaClient:
         try:
             with self.opener(request, timeout=self.timeout) as response:
                 payload = json.loads(response.read().decode("utf-8"))
+        except TimeoutError as exc:
+            raise OllamaConnectionError(
+                f"Ollama request to {self.base_url} timed out after {self.timeout} seconds. "
+                "The model may still be loading; retry or increase --ollama-timeout."
+            ) from exc
         except URLError as exc:
             raise OllamaConnectionError(
                 f"Could not connect to Ollama at {self.base_url}. Start Ollama and try again."
@@ -78,6 +117,15 @@ class OllamaClient:
 
 def _parse_plan(raw_text):
     return ProductionPlan.from_dict(json.loads(raw_text))
+
+
+def _model_matches(requested_model, available_models):
+    names = set(available_models)
+    if requested_model in names:
+        return True
+    if ":" not in requested_model and f"{requested_model}:latest" in names:
+        return True
+    return False
 
 
 def _initial_prompt(topic):
