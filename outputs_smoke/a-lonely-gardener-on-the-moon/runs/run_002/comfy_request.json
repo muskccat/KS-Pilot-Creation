@@ -1,0 +1,5 @@
+{
+  "mode": "mock",
+  "prompt": "A lonely gardener on the moon, cinematic composition, rich lighting, detailed environment, poster-ready visual direction. Revision: Make it darker and more cinematic. Make the title larger.",
+  "negative_prompt": "blurry, low quality, distorted anatomy, unreadable text"
+}
