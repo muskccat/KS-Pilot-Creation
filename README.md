@@ -61,6 +61,31 @@ python pilot.py iterate outputs/moon-gardener "Make it darker and more cinematic
 python pilot.py status outputs/moon-gardener
 ```
 
+### Local Python Environment
+
+```powershell
+python -m venv .venv
+.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+The current MVP uses only the Python standard library, so there is no package install step yet.
+
+### LLM Provider Options
+
+Mock mode remains the default and does not require Ollama:
+
+```powershell
+.venv\Scripts\python.exe pilot.py create "A lonely gardener on the moon" --llm mock
+```
+
+Ollama mode calls the local Ollama API:
+
+```powershell
+.venv\Scripts\python.exe pilot.py create "A lonely gardener on the moon" --llm ollama --ollama-url http://localhost:11434 --model llama3.1
+```
+
+If Ollama is not running, start Ollama first and retry the command.
+
 ## Planned Project Structure
 
 ```text

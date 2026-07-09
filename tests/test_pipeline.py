@@ -2,6 +2,8 @@ import json
 import shutil
 import tempfile
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 
@@ -65,6 +67,47 @@ class PipelineTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             ProductionPlan.from_dict({"project_title": "Missing required fields"})
+
+    def test_create_project_records_selected_llm_provider(self):
+        from pipeline import create_project
+
+        project_dir = create_project(
+            "A lonely gardener on the moon",
+            self.temp_dir,
+            llm_provider="mock",
+            ollama_url="http://localhost:11434",
+            model="llama3.1",
+        )
+
+        request = json.loads(
+            (project_dir / "runs" / "run_001" / "llm_request.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(request["llm_provider"], "mock")
+        self.assertEqual(request["ollama_url"], "http://localhost:11434")
+        self.assertEqual(request["model"], "llama3.1")
+
+    def test_cli_accepts_ollama_options_for_create(self):
+        from pilot import main
+
+        output = StringIO()
+        with redirect_stdout(output):
+            exit_code = main(
+                [
+                    "create",
+                    "A lonely gardener on the moon",
+                    "--outputs",
+                    str(self.temp_dir),
+                    "--llm",
+                    "mock",
+                    "--ollama-url",
+                    "http://localhost:11434",
+                    "--model",
+                    "llama3.1",
+                ]
+            )
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("a-lonely-gardener-on-the-moon", output.getvalue())
 
 
 if __name__ == "__main__":

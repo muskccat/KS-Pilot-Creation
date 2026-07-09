@@ -11,10 +11,16 @@ def main(argv=None):
     create_parser = subparsers.add_parser("create")
     create_parser.add_argument("topic")
     create_parser.add_argument("--outputs", default="outputs")
+    create_parser.add_argument("--llm", choices=["mock", "ollama"], default="mock")
+    create_parser.add_argument("--ollama-url", default="http://localhost:11434")
+    create_parser.add_argument("--model", default="llama3.1")
 
     iterate_parser = subparsers.add_parser("iterate")
     iterate_parser.add_argument("project_dir")
     iterate_parser.add_argument("feedback")
+    iterate_parser.add_argument("--llm", choices=["mock", "ollama"], default=None)
+    iterate_parser.add_argument("--ollama-url", default=None)
+    iterate_parser.add_argument("--model", default=None)
 
     status_parser = subparsers.add_parser("status")
     status_parser.add_argument("project_dir")
@@ -22,11 +28,23 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     if args.command == "create":
-        project_dir = create_project(args.topic, args.outputs)
+        project_dir = create_project(
+            args.topic,
+            args.outputs,
+            llm_provider=args.llm,
+            ollama_url=args.ollama_url,
+            model=args.model,
+        )
         print(project_dir)
         return 0
     if args.command == "iterate":
-        run_dir = iterate_project(args.project_dir, args.feedback)
+        run_dir = iterate_project(
+            args.project_dir,
+            args.feedback,
+            llm_provider=args.llm,
+            ollama_url=args.ollama_url,
+            model=args.model,
+        )
         print(run_dir)
         return 0
     if args.command == "status":
