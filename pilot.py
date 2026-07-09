@@ -1,6 +1,8 @@
 import argparse
 import json
+import sys
 
+from llm.ollama_client import OllamaConnectionError, OllamaResponseError
 from pipeline import create_project, get_status, iterate_project
 
 
@@ -27,29 +29,33 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
 
-    if args.command == "create":
-        project_dir = create_project(
-            args.topic,
-            args.outputs,
-            llm_provider=args.llm,
-            ollama_url=args.ollama_url,
-            model=args.model,
-        )
-        print(project_dir)
-        return 0
-    if args.command == "iterate":
-        run_dir = iterate_project(
-            args.project_dir,
-            args.feedback,
-            llm_provider=args.llm,
-            ollama_url=args.ollama_url,
-            model=args.model,
-        )
-        print(run_dir)
-        return 0
-    if args.command == "status":
-        print(json.dumps(get_status(args.project_dir), ensure_ascii=False, indent=2))
-        return 0
+    try:
+        if args.command == "create":
+            project_dir = create_project(
+                args.topic,
+                args.outputs,
+                llm_provider=args.llm,
+                ollama_url=args.ollama_url,
+                model=args.model,
+            )
+            print(project_dir)
+            return 0
+        if args.command == "iterate":
+            run_dir = iterate_project(
+                args.project_dir,
+                args.feedback,
+                llm_provider=args.llm,
+                ollama_url=args.ollama_url,
+                model=args.model,
+            )
+            print(run_dir)
+            return 0
+        if args.command == "status":
+            print(json.dumps(get_status(args.project_dir), ensure_ascii=False, indent=2))
+            return 0
+    except (OllamaConnectionError, OllamaResponseError) as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     return 1
 
 

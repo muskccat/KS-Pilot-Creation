@@ -2,7 +2,9 @@ import json
 import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 from contextlib import redirect_stdout
+from contextlib import redirect_stderr
 from io import StringIO
 from pathlib import Path
 
@@ -108,6 +110,18 @@ class PipelineTests(unittest.TestCase):
 
         self.assertEqual(exit_code, 0)
         self.assertIn("a-lonely-gardener-on-the-moon", output.getvalue())
+
+    def test_cli_prints_clean_error_when_ollama_is_unavailable(self):
+        from llm.ollama_client import OllamaConnectionError
+        from pilot import main
+
+        error_output = StringIO()
+        with patch("pilot.create_project", side_effect=OllamaConnectionError("Start Ollama and try again.")):
+            with redirect_stderr(error_output):
+                exit_code = main(["create", "Topic", "--outputs", str(self.temp_dir), "--llm", "ollama"])
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(error_output.getvalue(), "Error: Start Ollama and try again.\n")
 
 
 if __name__ == "__main__":
